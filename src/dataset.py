@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.image as img
 import cv2
 from torch.utils.data import Dataset, DataLoader
+from torchvision import transforms, utils
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -13,7 +14,7 @@ warnings.filterwarnings("ignore")
 plt.ion()
 
 
-category = ['bottle', 'cable', 'capsule', 'carpet', 'grid', 'hazelnut','leather', 'metal_nut', 
+categories = ['bottle', 'cable', 'capsule', 'carpet', 'grid', 'hazelnut','leather', 'metal_nut', 
             'pill', 'screw', 'tile', 'toothbrush','transistor', 'wood', 'zipper']
 
 objects = ['bottle', 'cable', 'capsule', 'hazelnut', 'metal_nut', 
@@ -24,7 +25,7 @@ textiles = ['carpet', 'grid', 'leather', 'tile', 'wood']
 
 class MVTecADDataset(Dataset):
     
-    def __init__(self, directory, mode, transform=None):
+    def __init__(self, directory, mode, category, transform=None):
         """
         directory (string): directory to all images
         mode (string): select between train, validation or test
@@ -34,6 +35,7 @@ class MVTecADDataset(Dataset):
         
         self.directory = directory
         self.mode = mode
+        self.category = category
         self.transform = transform
         
         self.samples = []
@@ -53,7 +55,7 @@ class MVTecADDataset(Dataset):
                 details, extension = sub.split(".")
                 return main + "ground_truth" + details + "_mask." + extension
         
-        def sample_images(folder):
+        def sample_images(folder, mode):
             """
             Appends all images and masks in given dataset to self.samples
             """
@@ -61,50 +63,71 @@ class MVTecADDataset(Dataset):
             images_list = sorted(images_directory, key=lambda e: e.name)
             images = map(lambda f: (f.path, folder.name), images_list)
 
-            if folder.name == "good":
-                images = map(lambda f:(f[0], f[1], None), images)
-                images = map(lambda f: {'image': f[0], 'label': f[1], 'mask': f[2]}, images)
+            if mode == "train":
+                if folder.name == "good":
+                    images = map(lambda f:(f[0], f[1], None), images)
+                    images = map(lambda f: {'image': f[0], 'label': f[1], 'mask': f[2]}, images)
+                else:
+                    images = map(lambda f:(f[0], f[1], image2mask(f[0])), images)
+                    images = map(lambda f: {'image': f[0], 'label': f[1], 'mask': f[2]}, images)
+            elif mode == "validate":
+                if folder.name == "good":
+                    images = map(lambda f:(f[0], f[1], None), list(images)[::2])
+                    images = map(lambda f: {'image': f[0], 'label': f[1], 'mask': f[2]}, images)
+                else:
+                    images = map(lambda f:(f[0], f[1], image2mask(f[0])), list(images)[::2])
+                    images = map(lambda f: {'image': f[0], 'label': f[1], 'mask': f[2]}, images)
             else:
-                images = map(lambda f:(f[0], f[1], image2mask(f[0])), images)
-                images = map(lambda f: {'image': f[0], 'label': f[1], 'mask': f[2]}, images)
-
+                if folder.name == "good":
+                    images = map(lambda f:(f[0], f[1], None), list(images)[1::2])
+                    images = map(lambda f: {'image': f[0], 'label': f[1], 'mask': f[2]}, images)
+                else:
+                    images = map(lambda f:(f[0], f[1], image2mask(f[0])), list(images)[1::2])
+                    images = map(lambda f: {'image': f[0], 'label': f[1], 'mask': f[2]}, images)
             self.samples.extend(images)
 
             
-        if mode == "train":
-            for category in categories:
-                category_directory = os.path.join(directory, category, mode)
-                folders = sorted(filter(lambda f: f.is_dir(), os.scandir(category_directory)), key=lambda x: x.name)
-                self.classes.update(map(lambda f: f.name, folders))
-                for folder in folders:
-                    sample_images(folder)
+        if self.mode == "train":
+#             for category in categories:
+            category_directory = os.path.join(directory, category, mode)
+            folders = sorted(filter(lambda f: f.is_dir(), os.scandir(category_directory)), key=lambda x: x.name)
+            self.classes.update(map(lambda f: f.name, folders))
+            for folder in folders:
+                sample_images(folder, mode)
+        elif self.mode == "validate":
+#             for category in categories:
+            category_directory = os.path.join(directory, category, "test")
+            folders = sorted(filter(lambda f: f.is_dir(), os.scandir(category_directory)), key=lambda x: x.name)
+            self.classes.update(map(lambda f: f.name, folders))
+            for folder in folders:
+                sample_images(folder, mode)
+        #self.mode == "test"
         else:
-            for category in categories:
-                category_directory = os.path.join(directory, category, "test")
-                folders = sorted(filter(lambda f: f.is_dir(), os.scandir(category_directory)), key=lambda x: x.name)
-                self.classes.update(map(lambda f: f.name, folders))
-                for folder in folders:
-                    sample_images(folder)
+#             for category in categories:
+            category_directory = os.path.join(directory, category, mode)
+            folders = sorted(filter(lambda f: f.is_dir(), os.scandir(category_directory)), key=lambda x: x.name)
+            self.classes.update(map(lambda f: f.name, folders))
+            for folder in folders:
+                sample_images(folder, mode)
         
     def __len__(self):
         return len(self.samples)
     
     def __getitem__(self, idx):
-        sample = self.samples[idx]
+        sample = self.samples[idx]   
         
-#         image_arr = io.imread(sample['image'])
-#         if sample['mask'] == None: mask = sample['mask']
-#         else: mask = io.imread(sample['mask'])
+        image = io.imread(sample['image'])
+        label = sample['label']     
+        if sample['mask'] is None: mask = sample['mask']
+        else: mask = io.imread(sample['mask'])
             
-#         sample['image'] = image_arr
-        
-#         if self.mode != "test" and self.transform:
-#             sample_fetched = self.transform(sample_fetched)
-            
-        return sample
+        sample_fetched = {'image': image, 'label': label, 'mask': mask}
 
-    
-    
+        if self.mode != "test" and self.transform:
+            sample_fetched = self.transform(sample_fetched)
+            
+        return sample_fetched
+  
         
 class RandomCrop(object):
     """
@@ -122,7 +145,7 @@ class RandomCrop(object):
         left = np.random.randint(0, width - new_width)
 
         image = image[top:top + new_height, left:left + new_width]
-        mask = mask[top:top + new_height, left:left + new_width]
+        if sample['mask'].any() != None: mask = mask[top:top + new_height, left:left + new_width]
 
         return {'image': image, 'label': label, 'mask': mask}
     
@@ -138,12 +161,12 @@ class RandomTranslation(object):
         hshift, vshift = np.random.randint(0, self.max_amount), np.random.randint(0, self.max_amount)
         
         h, w, n = image.shape
-        M = np.float32([[1, 0, hshift],[0, 1, vshift]])
+        M = np.float32([[1,0,hshift],[0,1,vshift]])
         
-        image = cv2.warpAffine(image, M, (h, w))
-        mask = cv2.warpAffine(mask, M, (h, w))
+        image_aug = cv2.warpAffine(image, M, (h, w))
+        if sample['mask'].any() != None: mask_aug = cv2.warpAffine(mask, M, (h, w))
         
-        return {'image': image, 'label': label, 'mask': mask}
+        return {'image': image_aug, 'label': label, 'mask': mask_aug}
     
 class RandomRotation(object):
     """
@@ -157,7 +180,7 @@ class RandomRotation(object):
         angle = np.random.randint(0, self.max_amount)
         
         image = transform.rotate(image, angle)
-        mask = transform.rotate(mask, angle)
+        if sample['mask'].any() != None: mask = transform.rotate(mask, angle)
         
         return {'image': image, 'label': label, 'mask': mask}
     
@@ -167,5 +190,8 @@ class ToTensor(object):
     """
     def __call__(self, sample):
         image, label, mask = sample['image'], sample['label'], sample['mask']
-        image = image.transpose((2, 0, 1))
-        return {'image': torch.from_numpy(image), 'label': label, 'mask': torch.from_numpy(mask)}
+        #image = image.transpose((2, 0, 1))
+        if sample['mask'] is not None: 
+            #mask.transpose((2, 0, 1))
+            return {'image': torch.from_numpy(image), 'label': label, 'mask': torch.from_numpy(mask)}
+        else: return {'image': torch.from_numpy(image), 'label': label, 'mask': mask}
