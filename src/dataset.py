@@ -138,7 +138,7 @@ class RandomTranslation(object):
         hshift, vshift = np.random.randint(0, self.max_amount), np.random.randint(0, self.max_amount)
         
         h, w, n = image.shape
-        M = np.float32([[1,0,hshift],[0,1,vshift]])
+        M = np.float32([[1, 0, hshift],[0, 1, vshift]])
         
         image = cv2.warpAffine(image, M, (h, w))
         mask = cv2.warpAffine(mask, M, (h, w))
