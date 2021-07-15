@@ -29,6 +29,7 @@ class MVTecADDataset(Dataset):
         """
         directory (string): directory to all images
         mode (string): select between train, validation or test
+        category (string): select category among categories
         transform(callable, optional): optional transform to be applied on a sample
         """
         #super(MVTecADDataset, self).__init__()
