@@ -29,7 +29,6 @@ class MVTecADDataset(Dataset):
         """
         directory (string): directory to all images
         mode (string): select between train, validation or test
-        category (string): select category among categories
         transform(callable, optional): optional transform to be applied on a sample
         """
         #super(MVTecADDataset, self).__init__()
@@ -118,8 +117,11 @@ class MVTecADDataset(Dataset):
         sample = self.samples[idx]   
         
         image = io.imread(sample['image'])
-        label = sample['label']     
-        if sample['mask'] is None: mask = sample['mask']
+        label = sample['label']
+        shape = image.shape
+        zero_mask = np.zeros((shape[0], shape[1]))
+        
+        if sample['mask'] is None: mask = zero_mask
         else: mask = io.imread(sample['mask'])
             
         sample_fetched = {'image': image, 'label': label, 'mask': mask}
