@@ -29,7 +29,6 @@ class MVTecADDataset(Dataset):
         """
         directory (string): directory to all images
         mode (string): select between train, validation or test
-        category (string): select a category among categories
         transform(callable, optional): optional transform to be applied on a sample
         """
         #super(MVTecADDataset, self).__init__()
@@ -127,12 +126,30 @@ class MVTecADDataset(Dataset):
             
         sample_fetched = {'image': image, 'label': label, 'mask': mask}
 
-        if self.mode != "test" and self.transform:
+        if self.transform:
             sample_fetched = self.transform(sample_fetched)
             
         return sample_fetched
   
         
+class Rescale(object):
+    """
+    Rescales images to the given size
+    """
+    def __init__(self, size):
+        self.size = size
+    
+    def __call__(self, sample):
+        image, label, mask = sample['image'], sample['label'], sample['mask']
+        height, width = image.shape[:2]
+        new_height, new_width = self.size, self.size
+
+        image = transform.resize(image, (new_height, new_width))
+        mask = transform.resize(mask, (new_height, new_width))
+        
+        return {'image': image, 'label': label, 'mask': mask}
+    
+            
 class RandomCrop(object):
     """
     Randomly crops the image
@@ -149,10 +166,11 @@ class RandomCrop(object):
         left = np.random.randint(0, width - new_width)
 
         image = image[top:top + new_height, left:left + new_width]
-        if sample['mask'].any() != None: mask = mask[top:top + new_height, left:left + new_width]
+        mask = mask[top:top + new_height, left:left + new_width]
 
         return {'image': image, 'label': label, 'mask': mask}
     
+            
 class RandomTranslation(object):
     """
     Randomly translates the image
@@ -167,11 +185,12 @@ class RandomTranslation(object):
         h, w, n = image.shape
         M = np.float32([[1,0,hshift],[0,1,vshift]])
         
-        image_aug = cv2.warpAffine(image, M, (h, w))
-        if sample['mask'].any() != None: mask_aug = cv2.warpAffine(mask, M, (h, w))
+        image = cv2.warpAffine(image, M, (h, w))
+        mask = cv2.warpAffine(mask, M, (h, w))
         
-        return {'image': image_aug, 'label': label, 'mask': mask_aug}
+        return {'image': image, 'label': label, 'mask': mask}
     
+            
 class RandomRotation(object):
     """
     Randomly rotataes the image
@@ -184,18 +203,19 @@ class RandomRotation(object):
         angle = np.random.randint(0, self.max_amount)
         
         image = transform.rotate(image, angle)
-        if sample['mask'].any() != None: mask = transform.rotate(mask, angle)
+        mask = transform.rotate(mask, angle)
         
         return {'image': image, 'label': label, 'mask': mask}
     
+            
 class ToTensor(object):
     """
     Converts ndarrays in sample to Tensors
     """
     def __call__(self, sample):
         image, label, mask = sample['image'], sample['label'], sample['mask']
-        #image = image.transpose((2, 0, 1))
-        if sample['mask'] is not None: 
-            #mask.transpose((2, 0, 1))
-            return {'image': torch.from_numpy(image), 'label': label, 'mask': torch.from_numpy(mask)}
-        else: return {'image': torch.from_numpy(image), 'label': label, 'mask': mask}
+        if len(image.shape) == 3: image = image.transpose((2, 0, 1))
+#         if sample['mask'] is not None: 
+#             mask.transpose((2, 0, 1))
+#             return {'image': torch.from_numpy(image), 'label': label, 'mask': torch.from_numpy(mask)}
+        return {'image': torch.from_numpy(image), 'label': label, 'mask': torch.from_numpy(mask)}
