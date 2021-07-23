@@ -21,9 +21,9 @@ plt.ion()
 from Dataset import MVTecADDataset, ToTensor, visualize_batch
 
 
-class AutoEncoder(torch.nn.Module):
+class AutoEncoderSeq(torch.nn.Module):
     def __init__(self, color_mode, directory, loss_fn, latent_space_dim=128, batch_size=128, verbose=True):
-        super(AutoEncoder, self).__init__()
+        super(AutoEncoderSeq, self).__init__()
         
         self.color_mode = color_mode
         self.directory = directory
@@ -116,3 +116,74 @@ class AutoEncoder(torch.nn.Module):
         out = self.encoder(x)
         out = self.decoder(out)
         return out
+
+    
+directory = "D:\mvtec_anomaly_detection"
+
+transform_texture = [RandomCrop(256), ToTensor()]
+transform_object = [RandomTranslation(40), RandomRotation(20), Rescale(256), ToTensor()]
+
+train_grid = MVTecADDataset(directory, category="grid", mode="train", transform=transforms.Compose(transform_texture))
+validate_grid = MVTecADDataset(directory, category="grid", mode="validate", transform=transforms.Compose(transform_texture))
+test_grid = MVTecADDataset(directory, category="grid", mode="test", transform=transforms.Compose(transform_texture))
+
+train_hazelnut_list = [MVTecADDataset(directory, category="hazelnut", mode="train", transform=transforms.Compose(transform_object)) for i in range(20)]
+train_hazelnut = torch.utils.data.ConcatDataset(train_hazelnut_list)
+
+
+train_grid_dataloader = DataLoader(train_grid, batch_size=128, shuffle=True, num_workers=0)
+validate_grid_dataloader = DataLoader(validate_grid, batch_size=128, shuffle=True, num_workers=0)
+test_grid_dataloader = DataLoader(test_grid, batch_size=128, shuffle=True, num_workers=0)
+
+train_hazelnut_dataloader = DataLoader(train_hazelnut, batch_size=128, shuffle=True, num_workers=0)
+validate_hazelnut_dataloader = DataLoader(validate_hazelnut, batch_size=128, shuffle=True, num_workers=0)
+test_hazelnut_dataloader = DataLoader(test_hazelnut, batch_size=128, shuffle=True, num_workers=0)
+
+
+num_epochs = 200
+
+device = torch.device("cuda:0" if torch.cuda.is_available else "cpu")
+print(device)
+model = AutoEncoderSeq(color_mode="rgb", directory=None, loss_fn="L2", latent_space_dim=128, batch_size=128, verbose=True).to(device)
+loss_fn = nn.MSELoss().to(device)
+optimizer = optim.Adam(model.parameters(), lr=0.0002)
+scheduler = lr_scheduler.ReduceLROnPlateau(optimizer,threshold=0.1, patience=1, mode='min') 
+
+
+torch.backends.cudnn.benchmark = True
+model.train()
+
+for i in range(num_epochs):
+    train_loss = 0.0
+    for j, train_data in enumerate(train_hazelnut_dataloader):
+        x = train_data['image'].to(device)
+        x = x.float().to(device)
+        
+        optimizer.zero_grad()
+        output = model(x)
+        loss = loss_fn(output, x)
+        loss.backward()
+        optimizer.step()
+        train_loss += loss.item() * x.size(0)
+        print('{}th batch learned'.format(j))
+    #scheduler.step(loss)
+    train_loss = train_loss / len(train_hazelnut_dataloader)
+    print('Epoch: {} \tTraining Loss: {:.6f}'.format(
+        i, 
+        train_loss
+        ))
+    if (i+1) % 10 == 0: torch.save(model.state_dict(), "D:/model/epoch_{}.pt".format(i+1))
+        
+        
+for i, test_data in enumerate(test_hazelnut_dataloader):
+    if i == 0:
+        fig = plt.figure(figsize=(8, 4))
+        ax1 = fig.add_subplot(1, 2, 1)
+        plt.imshow(test_data['image'][0].numpy().transpose((1, 2, 0)))
+        
+        x = test_data['image'].to(device)
+        out = model(x.float())
+        ax2 = fig.add_subplot(1, 2, 2)
+        plt.imshow(out[0].cpu().detach().numpy().transpose((1, 2, 0)))
+        print(out.shape)
+        break
