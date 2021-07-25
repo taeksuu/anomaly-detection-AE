@@ -38,6 +38,7 @@ class MVTecADDataset(Dataset):
         self.category = category
         self.transform = transform
         
+        self.samples_path = []
         self.samples = []
         self.classes = set()
         
@@ -65,26 +66,31 @@ class MVTecADDataset(Dataset):
 
             if mode == "train":
                 if folder.name == "good":
+                    images =  list(images)
+                    del images[9::10]
+                    images = map(lambda f:(f[0], f[1], None), images)
+                    images = map(lambda f: {'image': f[0], 'label': f[1], 'mask': f[2]}, images)
+                else:
+                    images =  list(images)
+                    del images[9::10]
+                    images = map(lambda f:(f[0], f[1], image2mask(f[0])), images)
+                    images = map(lambda f: {'image': f[0], 'label': f[1], 'mask': f[2]}, images)
+            elif mode == "validate":
+                if folder.name == "good":
+                    images = map(lambda f:(f[0], f[1], None), list(images)[::10])
+                    images = map(lambda f: {'image': f[0], 'label': f[1], 'mask': f[2]}, images)
+                else:
+                    images = map(lambda f:(f[0], f[1], image2mask(f[0])), list(images)[::10])
+                    images = map(lambda f: {'image': f[0], 'label': f[1], 'mask': f[2]}, images)
+            else:
+                if folder.name == "good":
                     images = map(lambda f:(f[0], f[1], None), images)
                     images = map(lambda f: {'image': f[0], 'label': f[1], 'mask': f[2]}, images)
                 else:
                     images = map(lambda f:(f[0], f[1], image2mask(f[0])), images)
                     images = map(lambda f: {'image': f[0], 'label': f[1], 'mask': f[2]}, images)
-            elif mode == "validate":
-                if folder.name == "good":
-                    images = map(lambda f:(f[0], f[1], None), list(images)[::2])
-                    images = map(lambda f: {'image': f[0], 'label': f[1], 'mask': f[2]}, images)
-                else:
-                    images = map(lambda f:(f[0], f[1], image2mask(f[0])), list(images)[::2])
-                    images = map(lambda f: {'image': f[0], 'label': f[1], 'mask': f[2]}, images)
-            else:
-                if folder.name == "good":
-                    images = map(lambda f:(f[0], f[1], None), list(images)[1::2])
-                    images = map(lambda f: {'image': f[0], 'label': f[1], 'mask': f[2]}, images)
-                else:
-                    images = map(lambda f:(f[0], f[1], image2mask(f[0])), list(images)[1::2])
-                    images = map(lambda f: {'image': f[0], 'label': f[1], 'mask': f[2]}, images)
-            self.samples.extend(images)
+            
+            self.samples_path.extend(images)
 
             
         if self.mode == "train":
@@ -96,7 +102,7 @@ class MVTecADDataset(Dataset):
                 sample_images(folder, mode)
         elif self.mode == "validate":
 #             for category in categories:
-            category_directory = os.path.join(directory, category, "test")
+            category_directory = os.path.join(directory, category, "train")
             folders = sorted(filter(lambda f: f.is_dir(), os.scandir(category_directory)), key=lambda x: x.name)
             self.classes.update(map(lambda f: f.name, folders))
             for folder in folders:
@@ -109,27 +115,30 @@ class MVTecADDataset(Dataset):
             self.classes.update(map(lambda f: f.name, folders))
             for folder in folders:
                 sample_images(folder, mode)
+                
+                
+        for sample in self.samples_path:
+            image = io.imread(sample['image'])
+            label = sample['label']
+            shape = image.shape
+            zero_mask = np.zeros((shape[0], shape[1]))
+        
+            if sample['mask'] is None: mask = zero_mask
+            else: mask = io.imread(sample['mask'])
+
+            sample_fetched = {'image': image, 'label': label, 'mask': mask}
+            
+            if self.transform:
+                sample_fetched = self.transform(sample_fetched)
+                
+            self.samples.append(sample_fetched)
         
     def __len__(self):
         return len(self.samples)
     
     def __getitem__(self, idx):
-        sample = self.samples[idx]   
-        
-        image = io.imread(sample['image'])
-        label = sample['label']
-        shape = image.shape
-        zero_mask = np.zeros((shape[0], shape[1]))
-        
-        if sample['mask'] is None: mask = zero_mask
-        else: mask = io.imread(sample['mask'])
-            
-        sample_fetched = {'image': image, 'label': label, 'mask': mask}
+        return self.samples[idx]
 
-        if self.transform:
-            sample_fetched = self.transform(sample_fetched)
-            
-        return sample_fetched
   
         
 class Rescale(object):
