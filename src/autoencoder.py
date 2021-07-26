@@ -185,7 +185,7 @@ def train(load_model_path=None, save_model_path=None, dataloader=None, num_epoch
                 'optimizer': optimizer.state_dict(),
                 'loss': loss
             }, save_model_path + "/epoch_{}.pt".format(last_epoch + epoch + 1))
-            writer.add_scalar('training loss', train_loss, last_epoch + epoch)
+        writer.add_scalar('training loss', train_loss, last_epoch + epoch)
 
             
 #train settings
