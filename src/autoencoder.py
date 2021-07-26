@@ -22,12 +22,11 @@ from Dataset import MVTecADDataset, ToTensor, visualize_batch
 
 
 class AutoEncoderSeq(torch.nn.Module):
-    def __init__(self, color_mode, directory, loss_fn, latent_space_dim=128, batch_size=128, verbose=True):
+    def __init__(self, color_mode, directory, latent_space_dim=128, batch_size=128, verbose=True):
         super(AutoEncoderSeq, self).__init__()
         
         self.color_mode = color_mode
         self.directory = directory
-        self.loss_fn = loss_fn
         self.latent_space_dim = latent_space_dim
         self.batch_size = batch_size
         self.verbose = verbose
@@ -38,143 +37,172 @@ class AutoEncoderSeq(torch.nn.Module):
         
         #encoder 
         self.encoder = nn.Sequential(
-            #Conv1
+            #Additional Conv: 256 * 256 * 1
             nn.Conv2d(in_channels=channels, out_channels=32, kernel_size=4, stride=2, padding=1),
-            nn.LeakyReLU(negative_slope=0.2, inplace=True),
+            nn.LeakyReLU(negative_slope=0.2),
+            
+            #Conv1
+            nn.Conv2d(in_channels=32, out_channels=32, kernel_size=4, stride=2, padding=1),
+            nn.LeakyReLU(negative_slope=0.2),
             
             #Conv2
             nn.Conv2d(in_channels=32, out_channels=32, kernel_size=4, stride=2, padding=1),
-            nn.LeakyReLU(negative_slope=0.2, inplace=True),
+            nn.LeakyReLU(negative_slope=0.2),
             
             #Conv3
             nn.Conv2d(in_channels=32, out_channels=32, kernel_size=3, stride=1, padding=1),
-            nn.LeakyReLU(negative_slope=0.2, inplace=True),
+            nn.LeakyReLU(negative_slope=0.2),
             
             #Conv4
             nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2, padding=1),
-            nn.LeakyReLU(negative_slope=0.2, inplace=True),
+            nn.LeakyReLU(negative_slope=0.2),
             
             #Conv5
             nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1),
-            nn.LeakyReLU(negative_slope=0.2, inplace=True),
+            nn.LeakyReLU(negative_slope=0.2),
             
             #Conv6
             nn.Conv2d(in_channels=64, out_channels=128, kernel_size=4, stride=2, padding=1),
-            nn.LeakyReLU(negative_slope=0.2, inplace=True),
+            nn.LeakyReLU(negative_slope=0.2),
             
             #Conv7
             nn.Conv2d(in_channels=128, out_channels=64, kernel_size=3, stride=1, padding=1),
-            nn.LeakyReLU(negative_slope=0.2, inplace=True),
+            nn.LeakyReLU(negative_slope=0.2),
             
             #Conv8
             nn.Conv2d(in_channels=64, out_channels=32, kernel_size=3, stride=1, padding=1),
-            nn.LeakyReLU(negative_slope=0.2, inplace=True),
+            nn.LeakyReLU(negative_slope=0.2),
             
             #Conv9
-            nn.Conv2d(in_channels=32, out_channels=self.latent_space_dim, kernel_size=8, stride=1, padding=0)
+            nn.Conv2d(in_channels=32, out_channels=self.latent_space_dim, kernel_size=8, stride=1, padding=0),
+
+
         )
         
         #decoder
         self.decoder = nn.Sequential(
+            
             #Conv9 reversed
             nn.ConvTranspose2d(in_channels=self.latent_space_dim, out_channels=32, kernel_size=8, stride=1, padding=0),
-            nn.LeakyReLU(negative_slope=0.2, inplace=True),
+            nn.LeakyReLU(negative_slope=0.2),
             
             #Conv8 reversed
             nn.ConvTranspose2d(in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1),
-            nn.LeakyReLU(negative_slope=0.2, inplace=True),
+            nn.LeakyReLU(negative_slope=0.2),
             
             #Conv7 reversed
             nn.ConvTranspose2d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1),
-            nn.LeakyReLU(negative_slope=0.2, inplace=True),
+            nn.LeakyReLU(negative_slope=0.2),
             
             #Conv6 reversed
             nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=4, stride=2, padding=1),
-            nn.LeakyReLU(negative_slope=0.2, inplace=True),
+            nn.LeakyReLU(negative_slope=0.2),
             
             #Conv5 reversed
             nn.ConvTranspose2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1),
-            nn.LeakyReLU(negative_slope=0.2, inplace=True),
+            nn.LeakyReLU(negative_slope=0.2),
+            
             
             #Conv4 reversed
             nn.ConvTranspose2d(in_channels=64, out_channels=32, kernel_size=4, stride=2, padding=1),
-            nn.LeakyReLU(negative_slope=0.2, inplace=True),
+            nn.LeakyReLU(negative_slope=0.2),
             
             #Conv3 reversed
             nn.ConvTranspose2d(in_channels=32, out_channels=32, kernel_size=3, stride=1, padding=1),
-            nn.LeakyReLU(negative_slope=0.2, inplace=True),
+            nn.LeakyReLU(negative_slope=0.2),
             
             #Conv2 reversed
             nn.ConvTranspose2d(in_channels=32, out_channels=32, kernel_size=4, stride=2, padding=1),
-            nn.LeakyReLU(negative_slope=0.2, inplace=True),
+            nn.LeakyReLU(negative_slope=0.2),
             
             #Conv1 reversed
+            nn.ConvTranspose2d(in_channels=32, out_channels=32, kernel_size=4, stride=2, padding=1),
+            nn.LeakyReLU(negative_slope=0.2),
+            
+            #Additional Conv reversed
             nn.ConvTranspose2d(in_channels=32, out_channels=channels, kernel_size=4, stride=2, padding=1),
+
         )
         
     def forward(self, x):
-        out = self.encoder(x)
-        out = self.decoder(out)
-        return out
-
+        x = self.encoder(x)
+        x = self.decoder(x)
+        return x
     
-directory = "D:\mvtec_anomaly_detection"
+    
+#directory to downloaded images
+directory = "C:/Users/Taeksoo Kim/Anomaly Detection/mvtec_anomaly_detection"
 
 transform_texture = [RandomCrop(256), ToTensor()]
 transform_object = [RandomTranslation(40), RandomRotation(20), Rescale(256), ToTensor()]
 
-train_grid = MVTecADDataset(directory, category="grid", mode="train", transform=transforms.Compose(transform_texture))
-validate_grid = MVTecADDataset(directory, category="grid", mode="validate", transform=transforms.Compose(transform_texture))
-test_grid = MVTecADDataset(directory, category="grid", mode="test", transform=transforms.Compose(transform_texture))
-
+#create dataset
 train_hazelnut_list = [MVTecADDataset(directory, category="hazelnut", mode="train", transform=transforms.Compose(transform_object)) for i in range(20)]
 train_hazelnut = torch.utils.data.ConcatDataset(train_hazelnut_list)
+validate_hazelnut = MVTecADDataset(directory, category="hazelnut", mode="validate", transform=transforms.Compose(transform_object))
+test_hazelnut = MVTecADDataset(directory, category="hazelnut", mode="test", transform=transforms.Compose(transform_object))
 
-
-train_grid_dataloader = DataLoader(train_grid, batch_size=128, shuffle=True, num_workers=0)
-validate_grid_dataloader = DataLoader(validate_grid, batch_size=128, shuffle=True, num_workers=0)
-test_grid_dataloader = DataLoader(test_grid, batch_size=128, shuffle=True, num_workers=0)
-
+#create dataloader
 train_hazelnut_dataloader = DataLoader(train_hazelnut, batch_size=128, shuffle=True, num_workers=0)
 validate_hazelnut_dataloader = DataLoader(validate_hazelnut, batch_size=128, shuffle=True, num_workers=0)
 test_hazelnut_dataloader = DataLoader(test_hazelnut, batch_size=128, shuffle=True, num_workers=0)
 
 
-num_epochs = 200
+def train(load_model_path=None, save_model_path=None, dataloader=None, num_epochs=100, criterion=None, optimizer=None, writer=None):
+    
+    model = AutoEncoderSeq(color_mode="rgb", directory=None, latent_space_dim=128, batch_size=128, verbose=True).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=0.0002) 
+    
+    last_epoch = 0
+    
+    if load_model_path is not None:
+        load = torch.load(load_model_path)
+        model.load_state_dict(load['model'])
+        optimizer.load_state_dict(load['optimizer'])
+        last_epoch = load['epoch']
+        loss = load['loss']
+    
+    model.train()
 
+    for epoch in range(num_epochs):
+        train_loss = 0.0
+        for i, train_data in enumerate(dataloader):
+            x = train_data['image'].to(device)
+            x = x.float().to(device)
+            optimizer.zero_grad()
+            output = model(x)
+            loss = criterion(output, x) 
+            loss.backward() 
+            optimizer.step()
+            train_loss += loss.item() * x.size(0)
+        train_loss = train_loss / len(dataloader)
+        print('Epoch: {} \tTraining Loss: {:.6f}'.format(last_epoch + epoch + 1, train_loss))
+        
+        if save_model_path is not None and (last_epoch +epoch + 1) % 10 == 0: 
+            torch.save({
+                'epoch': last_epoch + epoch + 1,
+                'model': model.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                'loss': loss
+            }, save_model_path + "/epoch_{}.pt".format(last_epoch + epoch + 1))
+            writer.add_scalar('training loss', train_loss, last_epoch + epoch)
+
+            
+#train settings
 device = torch.device("cuda:0" if torch.cuda.is_available else "cpu")
-print(device)
 model = AutoEncoderSeq(color_mode="rgb", directory=None, loss_fn="L2", latent_space_dim=128, batch_size=128, verbose=True).to(device)
-loss_fn = nn.MSELoss().to(device)
-optimizer = optim.Adam(model.parameters(), lr=0.0002)
-scheduler = lr_scheduler.ReduceLROnPlateau(optimizer,threshold=0.1, patience=1, mode='min') 
+criterion = nn.MSELoss().to(device)
+optimizer = optim.Adam(model.parameters(), lr=0.0002) 
+writer = SummaryWriter('runs/AE_L2')
+#load_model_path = "D:/model/model_4/epoch_200.pt"
+save_model_path = "D:/model/model_4"
 
 
-torch.backends.cudnn.benchmark = True
-model.train()
-
-for i in range(num_epochs):
-    train_loss = 0.0
-    for j, train_data in enumerate(train_hazelnut_dataloader):
-        x = train_data['image'].to(device)
-        x = x.float().to(device)
-        
-        optimizer.zero_grad()
-        output = model(x)
-        loss = loss_fn(output, x)
-        loss.backward()
-        optimizer.step()
-        train_loss += loss.item() * x.size(0)
-        print('{}th batch learned'.format(j))
-    #scheduler.step(loss)
-    train_loss = train_loss / len(train_hazelnut_dataloader)
-    print('Epoch: {} \tTraining Loss: {:.6f}'.format(
-        i, 
-        train_loss
-        ))
-    if (i+1) % 10 == 0: torch.save(model.state_dict(), "D:/model/epoch_{}.pt".format(i+1))
-        
-        
+#train
+train(load_model_path=None, save_model_path=save_model_path, dataloader=train_hazelnut_dataloader, num_epochs=200, criterion=criterion, optimizer=optimizer, writer=writer)     
+ 
+    
+#visualize output
 for i, test_data in enumerate(test_hazelnut_dataloader):
     if i == 0:
         fig = plt.figure(figsize=(8, 4))
