@@ -1,6 +1,6 @@
 class AutoEncoder(nn.Module):
     def __init__(self, color_mode):
-        super(ConvAutoEncoder, self).__init__()
+        super(AutoEncoder, self).__init__()
         
         if color_mode == "rgb":
             channels = 3
