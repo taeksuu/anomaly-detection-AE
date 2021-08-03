@@ -149,13 +149,13 @@ validate_hazelnut_dataloader = DataLoader(validate_hazelnut, batch_size=128, shu
 test_hazelnut_dataloader = DataLoader(test_hazelnut, batch_size=128, shuffle=True, num_workers=0)
 
 
-def train(load_model_path=None, save_model_path=None, dataloader=None, num_epochs=100, criterion=None, optimizer=None, writer=None):
+def train(load_model_path=None, save_model_path=None, train_dataloader=None, validate_dataloader=None, test_dataloader=None, num_epochs=100, criterion=None, optimizer=None, writer=None):
     
-    model = AutoEncoderSeq(color_mode="rgb", directory=None, latent_space_dim=128, batch_size=128, verbose=True).to(device)
+    model = AutoEncoderSeq(color_mode="rgb", directory=None, latent_space_dim=4096, batch_size=8, verbose=True).to(device)
     optimizer = optim.Adam(model.parameters(), lr=0.0002) 
     
+    #load model if specified
     last_epoch = 0
-    
     if load_model_path is not None:
         load = torch.load(load_model_path)
         model.load_state_dict(load['model'])
@@ -163,11 +163,13 @@ def train(load_model_path=None, save_model_path=None, dataloader=None, num_epoch
         last_epoch = load['epoch']
         loss = load['loss']
     
-    model.train()
 
     for epoch in range(num_epochs):
+        
+        #train
         train_loss = 0.0
-        for i, train_data in enumerate(dataloader):
+        model.train()
+        for i, train_data in enumerate(train_dataloader):
             x = train_data['image'].to(device)
             x = x.float().to(device)
             optimizer.zero_grad()
@@ -176,19 +178,48 @@ def train(load_model_path=None, save_model_path=None, dataloader=None, num_epoch
             loss.backward() 
             optimizer.step()
             train_loss += loss.item() * x.size(0)
-        train_loss = train_loss / len(dataloader)
-        print('Epoch: {} \tTraining Loss: {:.6f}'.format(last_epoch + epoch + 1, train_loss))
+        train_loss = train_loss / len(train_dataloader)
         
-        if save_model_path is not None and (last_epoch +epoch + 1) % 10 == 0: 
+        #validate
+        validate_loss = 0.0
+        model.eval()
+        for i, validate_data in enumerate(validate_dataloader):
+            x = validate_data['image'].to(device)
+            x = x.float().to(device)
+            output = model(x)
+            loss = criterion(output, x) 
+            validate_loss += loss.item() * x.size(0)
+        validate_loss = validate_loss / len(validate_dataloader)
+        
+        #test
+        test_loss = 0.0
+        model.eval()
+        for i, test_data in enumerate(test_dataloader):
+            x = test_data['image'].to(device)
+            x = x.float().to(device)
+            output = model(x)
+            loss = criterion(output, x) 
+            test_loss += loss.item() * x.size(0)
+        test_loss = test_loss / len(test_data)
+        
+        print('Epoch: {} \tTraining Loss: {:.6f} \tValidation Loss: {:.6f} \tTest Loss: {:.6f}'.format(last_epoch + epoch + 1, train_loss, validate_loss, test_loss))
+            
+        #tensorboard
+        writer.add_scalar('training loss', train_loss, last_epoch + epoch)
+        writer.add_scalar('validation loss', validate_loss, last_epoch + epoch)
+        
+        #save model
+        if save_model_path is not None and (last_epoch +epoch + 1) % 50 == 0: 
             torch.save({
                 'epoch': last_epoch + epoch + 1,
                 'model': model.state_dict(),
                 'optimizer': optimizer.state_dict(),
                 'loss': loss
             }, save_model_path + "/epoch_{}.pt".format(last_epoch + epoch + 1))
+            
             for name, param in model.named_parameters():
-            writer.add_histogram(name, param.clone().cpu().data.numpy(), epoch + 1)
-        writer.add_scalar('training loss', train_loss, last_epoch + epoch)
+                writer.add_histogram(name, param.clone().cpu().data.numpy(), epoch + 1)
+
 
             
 #train settings
