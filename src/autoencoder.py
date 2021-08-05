@@ -147,7 +147,7 @@ test_hazelnut_dataloader = DataLoader(test_hazelnut, batch_size=8, shuffle=True,
 
 def train(load_model_path=None, save_model_path=None, train_dataloader=None, validate_dataloader=None, test_dataloader=None, num_epochs=100, criterion=None, optimizer=None, writer=None):
     
-    model = AutoEncoderSeq(color_mode="rgb", directory=None, latent_space_dim=500, batch_size=8, verbose=True).to(device)
+    model = AutoEncoderSeq(color_mode="rgb", directory=None, latent_space_dim=128, batch_size=8, verbose=True).to(device)
     optimizer = optim.Adam(model.parameters(), lr=0.0002) 
     
     #load model if specified
