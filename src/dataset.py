@@ -77,10 +77,10 @@ class MVTecADDataset(Dataset):
                     images = map(lambda f: {'image': f[0], 'label': f[1], 'mask': f[2]}, images)
             elif mode == "validate":
                 if folder.name == "good":
-                    images = map(lambda f:(f[0], f[1], None), list(images)[::10])
+                    images = map(lambda f:(f[0], f[1], None), list(images)[9::10])
                     images = map(lambda f: {'image': f[0], 'label': f[1], 'mask': f[2]}, images)
                 else:
-                    images = map(lambda f:(f[0], f[1], image2mask(f[0])), list(images)[::10])
+                    images = map(lambda f:(f[0], f[1], image2mask(f[0])), list(images)[9::10])
                     images = map(lambda f: {'image': f[0], 'label': f[1], 'mask': f[2]}, images)
             else:
                 if folder.name == "good":
