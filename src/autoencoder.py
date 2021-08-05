@@ -19,7 +19,7 @@ warnings.filterwarnings("ignore")
 
 plt.ion()
 
-from Dataset import MVTecADDataset, ToTensor, visualize_batch
+from dataset_simple import MVTecADDataset
 
 
 class AutoEncoderSeq(torch.nn.Module):
@@ -134,24 +134,20 @@ class AutoEncoderSeq(torch.nn.Module):
 #directory to downloaded images
 directory = "C:/Users/Taeksoo Kim/Anomaly Detection/mvtec_anomaly_detection"
 
-transform_texture = [RandomCrop(256), ToTensor()]
-transform_object = [RandomTranslation(40), RandomRotation(20), Rescale(256), ToTensor()]
-
 #create dataset
-train_hazelnut_list = [MVTecADDataset(directory, category="hazelnut", mode="train", transform=transforms.Compose(transform_object)) for i in range(20)]
-train_hazelnut = torch.utils.data.ConcatDataset(train_hazelnut_list)
-validate_hazelnut = MVTecADDataset(directory, category="hazelnut", mode="validate", transform=transforms.Compose(transform_object))
-test_hazelnut = MVTecADDataset(directory, category="hazelnut", mode="test", transform=transforms.Compose(transform_object))
+train_hazelnut = MVTecADDataset(directory, category="hazelnut", mode="train", transform=True)
+validate_hazelnut = MVTecADDataset(directory, category="hazelnut", mode="validate", transform=True)
+test_hazelnut = MVTecADDataset(directory, category="hazelnut", mode="test", transform=True)
 
 #create dataloader
-train_hazelnut_dataloader = DataLoader(train_hazelnut, batch_size=128, shuffle=True, num_workers=0)
-validate_hazelnut_dataloader = DataLoader(validate_hazelnut, batch_size=128, shuffle=True, num_workers=0)
-test_hazelnut_dataloader = DataLoader(test_hazelnut, batch_size=128, shuffle=True, num_workers=0)
+train_hazelnut_dataloader = DataLoader(train_hazelnut, batch_size=8, shuffle=True, num_workers=0)
+validate_hazelnut_dataloader = DataLoader(validate_hazelnut, batch_size=8, shuffle=True, num_workers=0)
+test_hazelnut_dataloader = DataLoader(test_hazelnut, batch_size=8, shuffle=True, num_workers=0)
 
 
-def train(load_model_path=None, save_model_path=None, train_dataloader=None, validate_dataloader=None, test_dataloader=None, num_epochs=100, criterion=None, optimizer=None, writer=None):
+def train(load_model_path=None, save_model_path=None, train_dataloader=None, validate_dataloader=None, test_dataloader=None, num_epochs=800, criterion=None, optimizer=None, writer=None):
     
-    model = AutoEncoderSeq(color_mode="rgb", directory=None, latent_space_dim=4096, batch_size=8, verbose=True).to(device)
+    model = AutoEncoderSeq(color_mode="rgb", directory=None, latent_space_dim=128, batch_size=8, verbose=True).to(device)
     optimizer = optim.Adam(model.parameters(), lr=0.0002) 
     
     #load model if specified
@@ -224,17 +220,27 @@ def train(load_model_path=None, save_model_path=None, train_dataloader=None, val
             
 #train settings
 device = torch.device("cuda:0" if torch.cuda.is_available else "cpu")
-model = AutoEncoderSeq(color_mode="rgb", directory=None, loss_fn="L2", latent_space_dim=128, batch_size=128, verbose=True).to(device)
+model = AutoEncoderSeq(color_mode="rgb", directory=None, loss_fn="L2", latent_space_dim=128, batch_size=8, verbose=True).to(device)
 criterion = nn.MSELoss().to(device)
 optimizer = optim.Adam(model.parameters(), lr=0.0002) 
 writer = SummaryWriter('runs/AE_L2')
-#load_model_path = "D:/model/model_4/epoch_200.pt"
-save_model_path = "D:/model/model_4"
+load_model_path = None
+save_model_path = "D:/model/"
 
 
 #train
-train(load_model_path=None, save_model_path=save_model_path, dataloader=train_hazelnut_dataloader, num_epochs=200, criterion=criterion, optimizer=optimizer, writer=writer)     
- 
+train(load_model_path=load_model_path, save_model_path=save_model_path, train_dataloader=train_hazelnut_dataloader, validate_dataloader=validate_hazelnut_dataloader, test_dataloader=test_hazelnut_dataloader, num_epochs=800, criterion=criterion, optimizer=optimizer, writer=writer)
+    
+#load trained model
+device = torch.device("cuda:0" if torch.cuda.is_available else "cpu")
+model = AutoEncoderSeq(color_mode="rgb", directory=None, latent_space_dim=128, batch_size=8, verbose=True).to(device)
+optimizer = optim.Adam(model.parameters(), lr=0.0002)
+load_model_path = "D:/model/epoch_800.pt"
+load = torch.load(load_model_path)
+model.load_state_dict(load['model'])
+optimizer.load_state_dict(load['optimizer'])
+last_epoch = load['epoch']
+loss = load['loss']  
     
 #visualize output
 for i, test_data in enumerate(test_hazelnut_dataloader):
