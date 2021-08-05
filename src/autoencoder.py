@@ -220,7 +220,7 @@ def train(load_model_path=None, save_model_path=None, train_dataloader=None, val
             
 #train settings
 device = torch.device("cuda:0" if torch.cuda.is_available else "cpu")
-model = AutoEncoderSeq(color_mode="rgb", directory=None, loss_fn="L2", latent_space_dim=128, batch_size=8, verbose=True).to(device)
+model = AutoEncoderSeq(color_mode="rgb", directory=None, latent_space_dim=128, batch_size=8, verbose=True).to(device)
 criterion = nn.MSELoss().to(device)
 optimizer = optim.Adam(model.parameters(), lr=0.0002) 
 writer = SummaryWriter('runs/AE_L2')
