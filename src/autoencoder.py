@@ -145,9 +145,9 @@ validate_hazelnut_dataloader = DataLoader(validate_hazelnut, batch_size=8, shuff
 test_hazelnut_dataloader = DataLoader(test_hazelnut, batch_size=8, shuffle=True, num_workers=0)
 
 
-def train(load_model_path=None, save_model_path=None, train_dataloader=None, validate_dataloader=None, test_dataloader=None, num_epochs=800, criterion=None, optimizer=None, writer=None):
+def train(load_model_path=None, save_model_path=None, train_dataloader=None, validate_dataloader=None, test_dataloader=None, num_epochs=100, criterion=None, optimizer=None, writer=None):
     
-    model = AutoEncoderSeq(color_mode="rgb", directory=None, latent_space_dim=128, batch_size=8, verbose=True).to(device)
+    model = AutoEncoderSeq(color_mode="rgb", directory=None, latent_space_dim=500, batch_size=8, verbose=True).to(device)
     optimizer = optim.Adam(model.parameters(), lr=0.0002) 
     
     #load model if specified
@@ -166,8 +166,8 @@ def train(load_model_path=None, save_model_path=None, train_dataloader=None, val
         train_loss = 0.0
         model.train()
         for i, train_data in enumerate(train_dataloader):
-            x = train_data['image'].to(device)
-            x = x.float().to(device)
+            x = train_data[0].to(device)
+#             x = x.float().to(device)
             optimizer.zero_grad()
             output = model(x)
             loss = criterion(output, x) 
@@ -179,24 +179,26 @@ def train(load_model_path=None, save_model_path=None, train_dataloader=None, val
         #validate
         validate_loss = 0.0
         model.eval()
-        for i, validate_data in enumerate(validate_dataloader):
-            x = validate_data['image'].to(device)
-            x = x.float().to(device)
-            output = model(x)
-            loss = criterion(output, x) 
-            validate_loss += loss.item() * x.size(0)
-        validate_loss = validate_loss / len(validate_dataloader)
+        with torch.no_grad():
+            for i, validate_data in enumerate(validate_dataloader):
+                x = validate_data[0].to(device)
+#                 x = x.float().to(device)
+                output = model(x)
+                loss = criterion(output, x) 
+                validate_loss += loss.item() * x.size(0)
+            validate_loss = validate_loss / len(validate_dataloader)
         
         #test
         test_loss = 0.0
         model.eval()
-        for i, test_data in enumerate(test_dataloader):
-            x = test_data['image'].to(device)
-            x = x.float().to(device)
-            output = model(x)
-            loss = criterion(output, x) 
-            test_loss += loss.item() * x.size(0)
-        test_loss = test_loss / len(test_data)
+        with torch.no_grad():
+            for i, test_data in enumerate(test_dataloader):
+                x = test_data[0].to(device)
+#                 x = x.float().to(device)
+                output = model(x)
+                loss = criterion(output, x) 
+                test_loss += loss.item() * x.size(0)
+            test_loss = test_loss / len(test_data)
         
         print('Epoch: {} \tTraining Loss: {:.6f} \tValidation Loss: {:.6f} \tTest Loss: {:.6f}'.format(last_epoch + epoch + 1, train_loss, validate_loss, test_loss))
             
@@ -217,6 +219,7 @@ def train(load_model_path=None, save_model_path=None, train_dataloader=None, val
                 writer.add_histogram(name, param.clone().cpu().data.numpy(), epoch + 1)
 
 
+
             
 #train settings
 device = torch.device("cuda:0" if torch.cuda.is_available else "cpu")
@@ -231,6 +234,7 @@ save_model_path = "D:/model/"
 #train
 train(load_model_path=load_model_path, save_model_path=save_model_path, train_dataloader=train_hazelnut_dataloader, validate_dataloader=validate_hazelnut_dataloader, test_dataloader=test_hazelnut_dataloader, num_epochs=800, criterion=criterion, optimizer=optimizer, writer=writer)
     
+    
 #load trained model
 device = torch.device("cuda:0" if torch.cuda.is_available else "cpu")
 model = AutoEncoderSeq(color_mode="rgb", directory=None, latent_space_dim=128, batch_size=8, verbose=True).to(device)
@@ -242,14 +246,16 @@ optimizer.load_state_dict(load['optimizer'])
 last_epoch = load['epoch']
 loss = load['loss']  
     
+    
 #visualize output
+model.eval()
 for i, test_data in enumerate(test_hazelnut_dataloader):
     if i == 0:
         fig = plt.figure(figsize=(8, 4))
         ax1 = fig.add_subplot(1, 2, 1)
-        plt.imshow(test_data['image'][0].numpy().transpose((1, 2, 0)))
+        plt.imshow(test_data[0][0].numpy().transpose((1, 2, 0)))
         
-        x = test_data['image'].to(device)
+        x = test_data[0].to(device)
         out = model(x.float())
         ax2 = fig.add_subplot(1, 2, 2)
         plt.imshow(out[0].cpu().detach().numpy().transpose((1, 2, 0)))
