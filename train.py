@@ -39,118 +39,123 @@ def parse_args():
     return parser.parse_args()
 
 
-args = parse_args()
+def main():
+    args = parse_args()
 
-if args.color_mode == 'rgb' and (args.category == 'grid' or args.category == 'screw' or args.category == 'zipper'):
-    print("Only grayscale images are supported for {}. Continuing with grayscale images".format(args.category))
+    if args.color_mode == 'rgb' and (args.category == 'grid' or args.category == 'screw' or args.category == 'zipper'):
+        print("Only grayscale images are supported for {}. Continuing with grayscale images".format(args.category))
 
-if args.category in TEXTILES:
-    if args.augmentation:
-        transform_list = [Resize(256), ToTensor()]
-    else:
-        transform_list = [Resize(256), ToTensor()]
-elif args.category in OBJECTS:
-    if args.augmentation:
-        transform_list = [RandomTranslation(40), RandomRotation(30), Resize(256), ToTensor()]
-    else:
-        transform_list = [Resize(256), ToTensor()]
+    if args.category in TEXTILES:
+        if args.augmentation:
+            transform_list = [Resize(256), ToTensor()]
+        else:
+            transform_list = [Resize(256), ToTensor()]
+    elif args.category in OBJECTS:
+        if args.augmentation:
+            transform_list = [RandomTranslation(40), RandomRotation(30), Resize(256), ToTensor()]
+        else:
+            transform_list = [Resize(256), ToTensor()]
 
-dataset_directory = args.dataset_directory
-train_dataset = MVTecADDataset(dataset_path=dataset_directory, mode="train", category=args.category,
-                               color_mode=args.color_mode, transform=transforms.Compose(transform_list))
-validate_dataset = MVTecADDataset(dataset_path=dataset_directory, mode="validate", category=args.category,
-                                  color_mode=args.color_mode, transform=transforms.Compose(transform_list))
+    dataset_directory = args.dataset_directory
+    train_dataset = MVTecADDataset(dataset_path=dataset_directory, mode="train", category=args.category,
+                                   color_mode=args.color_mode, transform=transforms.Compose(transform_list))
+    validate_dataset = MVTecADDataset(dataset_path=dataset_directory, mode="validate", category=args.category,
+                                      color_mode=args.color_mode, transform=transforms.Compose(transform_list))
 
-device = torch.device("cuda:0" if torch.cuda.is_available else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available else "cpu")
 
-train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0, pin_memory=True)
-validate_dataloader = DataLoader(validate_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0,
-                                 pin_memory=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0, pin_memory=True)
+    validate_dataloader = DataLoader(validate_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0,
+                                     pin_memory=True)
 
-# build initial model
-if args.model == 'original':
-    model = OriginalAE(args.color_mode, args.latent_space_dim).to(device)
-elif args.model == 'large':
-    model = LargeAE(args.color_mode, args.latent_space_dim).to(device)
+    # build initial model
+    if args.model == 'original':
+        model = OriginalAE(args.color_mode, args.latent_space_dim).to(device)
+    elif args.model == 'large':
+        model = LargeAE(args.color_mode, args.latent_space_dim).to(device)
 
-# select type of loss
-if args.loss == 'l1':
-    criterion = nn.L1Loss().to(device)
-elif args.loss == 'l2':
-    criterion = nn.MSELoss().to(device)
-elif args.loss == 'ssim':
-    criterion = pytorch_ssim.SSIM(window_size=11).to(device)
-elif args.loss == 'mssim':
-    criterion = pytorch_msssim.MSSSIM(window_size=11).to(device)
+    # select type of loss
+    if args.loss == 'l1':
+        criterion = nn.L1Loss().to(device)
+    elif args.loss == 'l2':
+        criterion = nn.MSELoss().to(device)
+    elif args.loss == 'ssim':
+        criterion = pytorch_ssim.SSIM(window_size=11).to(device)
+    elif args.loss == 'mssim':
+        criterion = pytorch_msssim.MSSSIM(window_size=11).to(device)
 
-# initialize optimizer and writer
-optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
-writer = SummaryWriter(os.path.join(args.tensorboard_directory,
-                                    "{}_{}_{}_b{}_lr-{}".format(args.model, args.latent_space_dim, args.loss,
-                                                                args.batch_size,
-                                                                args.learning_rate)))
+    # initialize optimizer and writer
+    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+    writer = SummaryWriter(os.path.join(args.tensorboard_directory,
+                                        "{}_{}_{}_b{}_lr-{}".format(args.model, args.latent_space_dim, args.loss,
+                                                                    args.batch_size,
+                                                                    args.learning_rate)))
 
-load_model_path = args.load_model_directory
-save_model_path = args.save_model_directory
+    load_model_path = args.load_model_directory
+    save_model_path = args.save_model_directory
 
-# load trained model to continue training
-last_epoch = 0
-if load_model_path is not None:
-    load = torch.load(load_model_path)
-    model.load_state_dict(load['model'])
-    optimizer.load_state_dict(load['optimizer'])
-    last_epoch = load['epoch']
-    loss = load['loss']
+    # load trained model to continue training
+    last_epoch = 0
+    if load_model_path is not None:
+        load = torch.load(load_model_path)
+        model.load_state_dict(load['model'])
+        optimizer.load_state_dict(load['optimizer'])
+        last_epoch = load['epoch']
+        loss = load['loss']
 
-os.makedirs(os.path.join(save_model_path,
-                         "{}_{}_{}_b{}_lr-{}".format(args.model, args.latent_space_dim, args.loss, args.batch_size,
-                                                     args.learning_rate)), exist_ok=True)
-for epoch in range(args.num_epochs):
-    # train
-    train_loss = 0.0
-    model.train()
-    for _, train_data in enumerate(train_dataloader):
-        x = train_data[0].to(device)
-        x = x.float().to(device)
-        optimizer.zero_grad()
-        output = model(x)
-        loss = criterion(output, x)
-        loss.backward()
-        optimizer.step()
-        train_loss += loss.item() * x.size(0)
-    train_loss = train_loss / len(train_dataloader)
-
-    # validate
-    validate_loss = 0.0
-    model.eval()
-    with torch.no_grad():
-        for _, validate_data in enumerate(validate_dataloader):
-            x = validate_data[0].to(device)
+    os.makedirs(os.path.join(save_model_path,
+                             "{}_{}_{}_b{}_lr-{}".format(args.model, args.latent_space_dim, args.loss, args.batch_size,
+                                                         args.learning_rate)), exist_ok=True)
+    for epoch in range(args.num_epochs):
+        # train
+        train_loss = 0.0
+        model.train()
+        for _, train_data in enumerate(train_dataloader):
+            x = train_data[0].to(device)
             x = x.float().to(device)
+            optimizer.zero_grad()
             output = model(x)
             loss = criterion(output, x)
-            validate_loss += loss.item() * x.size(0)
-        validate_loss = validate_loss / len(validate_dataloader)
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item() * x.size(0)
+        train_loss = train_loss / len(train_dataloader)
 
-    print('Epoch: {} \tTraining Loss: {:.6f} \tValidation Loss: {:.6f}'.format(last_epoch + epoch + 1, train_loss,
-                                                                               validate_loss))
+        # validate
+        validate_loss = 0.0
+        model.eval()
+        with torch.no_grad():
+            for _, validate_data in enumerate(validate_dataloader):
+                x = validate_data[0].to(device)
+                x = x.float().to(device)
+                output = model(x)
+                loss = criterion(output, x)
+                validate_loss += loss.item() * x.size(0)
+            validate_loss = validate_loss / len(validate_dataloader)
 
-    # tensorboard
-    writer.add_scalar('training loss', train_loss, last_epoch + epoch)
-    writer.add_scalar('validation loss', validate_loss, last_epoch + epoch)
+        print('Epoch: {} \tTraining Loss: {:.6f} \tValidation Loss: {:.6f}'.format(last_epoch + epoch + 1, train_loss,
+                                                                                   validate_loss))
 
-    # save model
-    if save_model_path is not None and (last_epoch + epoch + 1) % 200 == 0:
-        torch.save({
-            'epoch': last_epoch + epoch + 1,
-            'model': model.state_dict(),
-            'optimizer': optimizer.state_dict(),
-            'loss': loss
-        }, os.path.join(save_model_path,
-                        "{}_{}_{}_b{}_lr-{}".format(args.model, args.latent_space_dim, args.loss, args.batch_size,
-                                                    args.learning_rate), "epoch_{}.pt".format(last_epoch + epoch + 1)))
+        # tensorboard
+        writer.add_scalar('training loss', train_loss, last_epoch + epoch)
+        writer.add_scalar('validation loss', validate_loss, last_epoch + epoch)
 
-        for name, param in model.named_parameters():
-            writer.add_histogram(name, param.clone().cpu().data.numpy(), epoch + 1)
+        # save model
+        if save_model_path is not None and (last_epoch + epoch + 1) % 200 == 0:
+            torch.save({
+                'epoch': last_epoch + epoch + 1,
+                'model': model.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                'loss': loss
+            }, os.path.join(save_model_path,
+                            "{}_{}_{}_b{}_lr-{}".format(args.model, args.latent_space_dim, args.loss, args.batch_size,
+                                                        args.learning_rate), "epoch_{}.pt".format(last_epoch + epoch + 1)))
 
-    if not torch.isfinite(loss) or train_loss > 500: break
+            for name, param in model.named_parameters():
+                writer.add_histogram(name, param.clone().cpu().data.numpy(), epoch + 1)
+
+        if not torch.isfinite(loss) or train_loss > 500: break
+
+            
+if __name__ == '__main__':
+    main()
