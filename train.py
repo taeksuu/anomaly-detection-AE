@@ -28,7 +28,7 @@ def parse_args():
     parser.add_argument('--num_epochs', type=int, default=1600)
 
     parser.add_argument('--dataset_directory', type=str, default='D:/mvtec_anomaly_detection')
-    parser.add_argument('--category', type=str, choices=CATEGORIES, default='bottle')
+    parser.add_argument('--category', type=str, choices=CATEGORIES, default='hazelnut')
     parser.add_argument('--color_mode', type=str, choices=['rgb', 'grayscale'], default='rgb')
     parser.add_argument('--augmentation', type=bool, default=True)
 
@@ -56,15 +56,15 @@ def main():
         else:
             transform_list = [Resize(256), ToTensor()]
 
-    dataset_directory = args.dataset_directory
-    train_dataset = MVTecADDataset(dataset_path=dataset_directory, mode="train", category=args.category,
+    train_dataset = MVTecADDataset(dataset_path=args.dataset_directory, mode="train", category=args.category,
                                    color_mode=args.color_mode, transform=transforms.Compose(transform_list))
-    validate_dataset = MVTecADDataset(dataset_path=dataset_directory, mode="validate", category=args.category,
+    validate_dataset = MVTecADDataset(dataset_path=args.dataset_directory, mode="validate", category=args.category,
                                       color_mode=args.color_mode, transform=transforms.Compose(transform_list))
 
     device = torch.device("cuda:0" if torch.cuda.is_available else "cpu")
 
-    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0, pin_memory=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0,
+                                  pin_memory=True)
     validate_dataloader = DataLoader(validate_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0,
                                      pin_memory=True)
 
@@ -88,8 +88,8 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
     writer = SummaryWriter(os.path.join(args.tensorboard_directory,
                                         "{}_{}_{}_b{}_lr-{}".format(args.model, args.latent_space_dim, args.loss,
-                                                                    args.batch_size,
-                                                                    args.learning_rate)))
+                                                                    args.batch_size, args.learning_rate),
+                                        args.category))
 
     load_model_path = args.load_model_directory
     save_model_path = args.save_model_directory
@@ -105,7 +105,7 @@ def main():
 
     os.makedirs(os.path.join(save_model_path,
                              "{}_{}_{}_b{}_lr-{}".format(args.model, args.latent_space_dim, args.loss, args.batch_size,
-                                                         args.learning_rate)), exist_ok=True)
+                                                         args.learning_rate), args.category), exist_ok=True)
     for epoch in range(args.num_epochs):
         # train
         train_loss = 0.0
@@ -115,7 +115,10 @@ def main():
             x = x.float().to(device)
             optimizer.zero_grad()
             output = model(x)
-            loss = criterion(output, x)
+            if args.loss == 'l1' or args.loss == 'l2':
+                loss = criterion(output, x)
+            else:
+                loss = -criterion(output, x)
             loss.backward()
             optimizer.step()
             train_loss += loss.item() * x.size(0)
@@ -129,7 +132,10 @@ def main():
                 x = validate_data[0].to(device)
                 x = x.float().to(device)
                 output = model(x)
-                loss = criterion(output, x)
+                if args.loss == 'l1' or args.loss == 'l2':
+                    loss = criterion(output, x)
+                else:
+                    loss = -criterion(output, x)
                 validate_loss += loss.item() * x.size(0)
             validate_loss = validate_loss / len(validate_dataloader)
 
@@ -149,13 +155,15 @@ def main():
                 'loss': loss
             }, os.path.join(save_model_path,
                             "{}_{}_{}_b{}_lr-{}".format(args.model, args.latent_space_dim, args.loss, args.batch_size,
-                                                        args.learning_rate), "epoch_{}.pt".format(last_epoch + epoch + 1)))
+                                                        args.learning_rate), args.category,
+                            "epoch_{}_TL_{:.2f}_VL_{:.2f}.pt".format(last_epoch + epoch + 1, train_loss,
+                                                                     validate_loss)))
 
             for name, param in model.named_parameters():
                 writer.add_histogram(name, param.clone().cpu().data.numpy(), epoch + 1)
 
         if not torch.isfinite(loss) or train_loss > 500: break
 
-            
+
 if __name__ == '__main__':
     main()
